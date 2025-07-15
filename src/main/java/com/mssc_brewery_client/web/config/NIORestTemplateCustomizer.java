@@ -1,39 +1,44 @@
 package com.mssc_brewery_client.web.config;
 
+import java.util.concurrent.TimeUnit;
+
 import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
 import org.apache.hc.client5.http.impl.async.HttpAsyncClients;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
-import org.apache.hc.core5.reactor.DefaultConnectingIOReactor;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManager;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
 import org.apache.hc.core5.reactor.IOReactorConfig;
+import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
-import org.springframework.boot.web.client.RestTemplateCustomizer;
-import org.springframework.http.client.ClientHttpRequestFactory;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.reactive.HttpComponentsClientHttpConnector;
+import org.springframework.web.reactive.function.client.WebClient;
 
-//@Component
-public class NIORestTemplateCustomizer implements RestTemplateCustomizer {
+@Configuration
+public class NIORestTemplateCustomizer  {
 
-    //impl
-    /*public ClientHttpRequestFactory clientHttpRequestFactory(){
-        final DefaultConnectingIOReactor ioreactor = new DefaultConnectingIOReactor(IOReactorConfig
-                .custom()
-                .setSoTimeout(Timeout.ofMilliseconds(3000))
+    @Bean
+    public WebClient webClient() {
+        IOReactorConfig ioReactorConfig = IOReactorConfig.custom()
+                .setSoTimeout(Timeout.ofSeconds(3))
                 .setIoThreadCount(4)
-                .build());
-
-        final PoolingHttpClientConnectionManager connectionManager= new PoolingHttpClientConnectionManager(ioreactor);
-        connectionManager.setDefaultMaxPerRoute(100);
-        connectionManager.setMaxTotal(1000);
-
-        CloseableHttpAsyncClient httpAsyncClient= HttpAsyncClients.custom()
-                .setConnectionManager(connectionManager)
                 .build();
-        return new HttpComponentsClientHttpRequestFactory(httpAsyncClient);
-    }*/
-    @Override
-    public void customize(RestTemplate restTemplate) {
-       // restTemplate.setRequestFactory(clientHttpRequestFactory());
+
+        PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+                .setMaxConnPerRoute(100)
+                .setMaxConnTotal(1000)
+                .setConnectionTimeToLive(TimeValue.ofMinutes(2))
+                .build();
+
+        CloseableHttpAsyncClient asyncClient = HttpAsyncClients.custom()
+                .setConnectionManager(connectionManager)
+                .setIOReactorConfig(ioReactorConfig)
+                .build();
+
+        asyncClient.start();
+
+        return WebClient.builder()
+                .clientConnector(new HttpComponentsClientHttpConnector(asyncClient))
+                .build();
     }
 }
